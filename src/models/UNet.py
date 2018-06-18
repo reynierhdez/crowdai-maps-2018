@@ -41,6 +41,12 @@ class UNet11(nn.Module):
 
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
 
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
+        
     def require_encoder_grad(self,requires_grad):
         blocks = [self.conv1,
                   self.conv2,
@@ -125,6 +131,12 @@ class UnetResnet18(nn.Module):
         self.dec0 = ConvRelu(num_filters, num_filters)
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
 
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
+        
     def require_encoder_grad(self,requires_grad):
         blocks = [self.conv1,
                   self.conv2,
@@ -214,6 +226,12 @@ class UnetResnet34(nn.Module):
         self.dec0 = ConvRelu(num_filters, num_filters)
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
 
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
+        
     def require_encoder_grad(self,requires_grad):
         blocks = [self.conv1,
                   self.conv2,
@@ -320,6 +338,12 @@ class UNet16(nn.Module):
         self.dec1 = ConvRelu(64 + num_filters, num_filters)
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
         
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
+        
     def require_encoder_grad(self,requires_grad):
         blocks = [self.conv1,
                   self.conv2,
@@ -406,6 +430,12 @@ class UnetResnet152(nn.Module):
         self.dec1 = DecoderBlockV2(num_filters * 2 * 2, num_filters * 2 * 2, num_filters, is_deconv)
         self.dec0 = ConvRelu(num_filters, num_filters)
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
+        
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
         
     def require_encoder_grad(self,requires_grad):
         blocks = [self.conv1,
