@@ -186,7 +186,7 @@ class MapDataset(data.Dataset):
             img_id = self.train_img_ids[idx]
             img,masks = self.get_img_masks(img_id)
         elif self.mode == 'val':
-            img_id = self.self.val_img_ids[idx]
+            img_id = self.val_img_ids[idx]
             img,masks = self.get_img_masks(img_id)
         
         if self.mode in ['train','val']:
