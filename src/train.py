@@ -13,6 +13,7 @@ import glob
 import shutil
 import argparse
 import pandas as pd
+import numpy as np
 from PIL import Image
 from skimage.io import imsave,imread
 
@@ -197,7 +198,7 @@ def main():
 
         val_loader = torch.utils.data.DataLoader(
             val_dataset,
-            batch_size=args.batch_size,        
+            batch_size=args.batch_size*2,        
             shuffle=True,
             num_workers=args.workers,
             pin_memory=True,
@@ -245,6 +246,8 @@ def main():
                                                                               hard_dice,
                                                                               optimizer,
                                                                               epoch)
+                                                                              
+
 
             # evaluate on validation set
             val_loss,val_bce_loss,val_dice_loss,val_hard_dice,val_ap,val_ar = validate(val_loader,
@@ -447,28 +450,38 @@ def validate(val_loader,
             # for baseline - assume that in the ground-truths buildings are not touching
             # otherwise - add additional output to the generator
             gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
-            num_buildings = labels.max()
+            num_buildings = gt_labels.max()
             gt_masks = []
 
             for _ in range(1,num_buildings+1):
-                gt_masks.append((labels==_)*1)            
-
-            # simple wt
-            y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+                gt_masks.append((gt_labels==_)*1) 
+                
+            if num_buildings==0:
+                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+                
+                if y_pred_wt.max()==0:
+                    averaged_aps_wt.append(1)
+                    averaged_ars_wt.append(1)
+                else:
+                    averaged_aps_wt.append(0)
+                    averaged_ars_wt.append(0)                   
+            else:
+                # simple wt
+                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
             
-            __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
+                __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
 
-            averaged_aps_wt.append(map_wt[1])
-            averaged_ars_wt.append(map_wt[3])
+                averaged_aps_wt.append(__[1])
+                averaged_ars_wt.append(__[3])
 
             # apply colormap for easier tracking
-            if i % args.print_freq * 10 == 0:   
+            if i % args.print_freq * 20 == 0:   
                 y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
                 y_preds_wt.append(y_pred_wt)
 
             # print('MAP for sample {} is {}'.format(img_sample[j],m_ap))
             
-        if i % args.print_freq * 10 == 0:
+        if i % args.print_freq * 20 == 0:
             y_preds_wt = np.asarray(y_preds_wt)
         
         averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
@@ -477,7 +490,7 @@ def validate(val_loader,
         #============ TensorBoard logging ============#                                            
         if args.tensorboard_images:
             # if i == 0:
-            if i % args.print_freq * 10 == 0:            
+            if i % args.print_freq * 20 == 0:            
                 if target.size(1)==1:
                     info = {
                         'images': to_np(input[:10,:,:,:]),
@@ -523,7 +536,7 @@ def validate(val_loader,
                   'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss  {loss.val:.4f} ({loss.avg:.4f})\t'
                   'HDICE {hard_dices.val:.4f} ({hard_dices.avg:.4f})\t'
-                  'AP    {ap_scores.val:.4f} ({loap_scoresss.avg:.4f})\t'
+                  'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
                   'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'.format(
                    i, len(val_loader), batch_time=batch_time,
                       loss=losses,hard_dices=hard_dices,

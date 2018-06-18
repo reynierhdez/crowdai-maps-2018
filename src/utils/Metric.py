@@ -1,20 +1,22 @@
 import numpy as np
 
 def calculate_ap(y_pred, gt_masks):
-    
-    plt.imshow(y_pred)
-    plt.show()
-    
-    height, width, num_masks = gt_masks.shape[1],gt_masks.shape[2], gt_masks.shape[0]
+    # control for images with only one object
+    if len(gt_masks.shape)>2:
+        height, width, num_masks = gt_masks.shape[1],gt_masks.shape[2], gt_masks.shape[0]
+    else:
+        print(gt_masks.shape)
+        height, width, num_masks = gt_masks.shape[0],gt_masks.shape[1], 1
+
+    # pred labels and gt masks should have the same dimensions
+    assert y_pred.shape[0]==height
+    assert y_pred.shape[1]==width
     
     # Make a ground truth label image (pixel value is index of object label)
     # Note that labels will contain the background label
     labels = np.zeros((height, width), np.uint16)
     for index in range(0, num_masks):
         labels[gt_masks[index] > 0] = index + 1    
-        
-    plt.imshow(labels)
-    plt.show()
         
     # y_pred should also contain background labels
     # y_pred should contain it if it is taken from wt transform
