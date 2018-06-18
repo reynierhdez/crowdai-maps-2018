@@ -36,7 +36,7 @@ from torch.nn import Sigmoid
 from models.model_params import model_presets
 
 #============ Loss ============#
-from Loss import HardDice,SemsegLoss
+from models.Loss import HardDice,SemsegLoss
 
 #============ Utils and augs ============#
 from utils.LRScheduler import CyclicLR
@@ -45,7 +45,7 @@ from utils.Metric import calculate_ap
 from utils.Watershed import energy_baseline as wt_seeds
 from utils.Watershed import label_baseline as wt_baseline
 from aug.AugPresets import TrainAugsIaa,TrainAugs,ValAugs
-from utils.Util import str2bool,restricted_float,to_np,rle_encode,rle_encoding
+from utils.Util import str2bool,restricted_float,to_np
 
 parser = argparse.ArgumentParser(description='CrowdAI mapping challenge params')
 
@@ -102,8 +102,8 @@ print(args)
 assert args.m0 <= args.m1
 
 # add fold number to the lognumber 
-if not (args.predict or args.predict_train):
-    args.lognumber = args.lognumber + '_fold' + str(args.fold_num)
+# if not (args.predict or args.predict_train):
+#    args.lognumber = args.lognumber + '_fold' + str(args.fold_num)
 
 # Set the Tensorboard logger
 if args.tensorboard or args.tensorboard_images:
@@ -332,7 +332,7 @@ def train(train_loader,
         output = model(input_var)
                                             
         loss,bce_loss,dice_loss = criterion(output, target_var)
-        hard_dice = hard_dice(output, target_var)
+        hard_dice_ = hard_dice(output, target_var)
         
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -347,7 +347,7 @@ def train(train_loader,
         losses.update(loss.data[0], input.size(0))
         bce_losses.update(bce_loss.data[0], input.size(0))
         dice_losses.update(dice_loss.data[0], input.size(0))
-        hard_dices.update(hard_dice.data[0], input.size(0))        
+        hard_dices.update(hard_dice_.data[0], input.size(0))        
         
         # log the current lr
         current_lr = optimizer.state_dict()['param_groups'][0]['lr']
@@ -426,7 +426,7 @@ def validate(val_loader,
         output = model(input_var)
                                             
         loss,bce_loss,dice_loss = criterion(output, target_var)
-        hard_dice = hard_dice(output, target_var)
+        hard_dice_ = hard_dice(output, target_var)
         
         # go over all of the predictions
         # apply the transformation to each mask
@@ -462,19 +462,22 @@ def validate(val_loader,
             averaged_ars_wt.append(map_wt[3])
 
             # apply colormap for easier tracking
-            y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
-            
-            y_preds_wt.append(y_pred_wt)
+            if i % args.print_freq * 10 == 0:   
+                y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
+                y_preds_wt.append(y_pred_wt)
 
             # print('MAP for sample {} is {}'.format(img_sample[j],m_ap))
+            
+        if i % args.print_freq * 10 == 0:
+            y_preds_wt = np.asarray(y_preds_wt)
         
-        y_preds_wt = np.asarray(y_preds_wt)
         averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
         averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
 
         #============ TensorBoard logging ============#                                            
         if args.tensorboard_images:
-            if i == 0:
+            # if i == 0:
+            if i % args.print_freq * 10 == 0:            
                 if target.size(1)==1:
                     info = {
                         'images': to_np(input[:10,:,:,:]),
@@ -490,7 +493,7 @@ def validate(val_loader,
         losses.update(loss.data[0], input.size(0))
         bce_losses.update(bce_loss.data[0], input.size(0))
         dice_losses.update(dice_loss.data[0], input.size(0))
-        hard_dices.update(hard_dice.data[0], input.size(0))
+        hard_dices.update(hard_dice_.data[0], input.size(0))
         ap_scores.update(averaged_aps_wt, input.size(0))
         ar_scores.update(averaged_ars_wt, input.size(0))
 

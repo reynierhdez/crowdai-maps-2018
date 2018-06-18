@@ -27,7 +27,8 @@ class SemsegLoss(nn.Module):
                  use_running_mean=False,
                  bce_weight=1,
                  dice_weight=1,
-                 eps=1e-10
+                 eps=1e-10,
+                 gamma=0.9
                  ):
         super().__init__()
 
@@ -36,6 +37,7 @@ class SemsegLoss(nn.Module):
         self.dice_weight = dice_weight
         self.bce_weight = bce_weight
         self.eps = eps
+        self.gamma = gamma 
         
         self.use_running_mean = use_running_mean
         self.bce_weight = bce_weight
@@ -64,7 +66,7 @@ class SemsegLoss(nn.Module):
         dice_output = F.sigmoid(outputs)
         intersection = (dice_output * dice_target).sum()
         union = dice_output.sum() + dice_target.sum() + self.eps
-        dice_loss = (1 - torch.log(2 * intersection / union))        
+        dice_loss = (-torch.log(2 * intersection / union))        
         
         if self.use_running_mean == False:
             bmw = self.bce_weight
