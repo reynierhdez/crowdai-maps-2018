@@ -24,6 +24,9 @@ def calculate_ap(y_pred, gt_masks):
     true_objects = len(np.unique(labels))
     pred_objects = len(np.unique(y_pred)) 
     
+    # print('True objects {}'.format(true_objects))
+    # print('Pred objects {}'.format(pred_objects))
+    
     # Compute intersection between all objects
     intersection = np.histogram2d(labels.flatten(), y_pred.flatten(), bins=(true_objects, pred_objects))[0]
 
@@ -50,8 +53,17 @@ def calculate_ap(y_pred, gt_masks):
     # print("Thresh\tTP\tFP\tFN\tPrec.")
     for t in [0.5]:
         tp, fp, fn = precision_at(t, iou)
-        p = tp / (tp + fp)
-        r = tp / (tp + fn)
+        
+        if tp == 0 and (tp + fp) == 0:
+            p = 1
+        else:
+            p = tp / (tp + fp)
+            
+        if tp == 0 and (tp + fn) == 0:
+            r = 1
+        else: 
+            r = tp / (tp + fn)
+        
         # print("{:1.3f}\t{}\t{}\t{}\t{:1.3f}".format(t, tp, fp, fn, p))
         prec.append(p)
         rec.append(r)

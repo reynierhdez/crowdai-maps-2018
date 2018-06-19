@@ -123,12 +123,7 @@ def main():
     
     # model.cuda()
     model = torch.nn.DataParallel(model).cuda()
-    # freeze the encoder
-    print('Trainable param groups BEFORE freeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))     
-    model.module.freeze()
-    print('Encoder frozen!')
-    print('Trainable param groups AFTER freeze   {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))
-    
+
     if args.optimizer.startswith('adam'):
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
                                      # Only finetunable params
@@ -142,7 +137,7 @@ def main():
                                     # Only finetunable params
                                     lr=args.lr)
     else:
-        raise ValueError('Optimizer not supported')    
+        raise ValueError('Optimizer not supported')        
     
     # optionally resume from a checkpoint
     if args.resume:
@@ -155,11 +150,44 @@ def main():
             optimizer.load_state_dict(checkpoint['optimizer'])            
             print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))    
+            print("=> no checkpoint found at '{}'".format(args.resume))      
+    
+    # freeze the encoder
+    print('Trainable param groups BEFORE freeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))     
+    model.module.freeze()
+    print('Encoder frozen!')
+    print('Trainable param groups AFTER freeze   {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))
     
     if args.predict:
         pass
+    
+    elif args.evaluate:
         
+        val_augs = ValAugs(mean = model.module.mean,
+                           std = model.module.std) 
+        val_dataset = MapDataset(transforms = val_augs,
+                                 mode = 'val',
+                                 target_resl = (args.img_size,args.img_size),
+                                 do_energy_levels = args.do_energy_levels,
+                                 do_boundaries = args.do_boundaries)
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset,
+            batch_size=args.batch_size*2,        
+            shuffle=True,
+            num_workers=args.workers,
+            pin_memory=True,
+            drop_last=False)
+        
+        criterion = SemsegLoss(use_running_mean = args.do_running_mean,
+                               bce_weight = args.bce_weight,
+                               dice_weight = args.dice_weight).cuda()
+        
+        hard_dice = HardDice(threshold=args.ths)        
+
+        val_loss,val_bce_loss,val_dice_loss,val_hard_dice,val_ap,val_ar = validate(val_loader,
+                                                                                   model,
+                                                                                   criterion,
+                                                                                   hard_dice)
     else:
         if args.do_augs:
             train_augs = TrainAugs(prob = args.aug_prob,
@@ -493,10 +521,10 @@ def validate(val_loader,
             if i % args.print_freq * 20 == 0:            
                 if target.size(1)==1:
                     info = {
-                        'images': to_np(input[:10,:,:,:]),
-                        'gt_mask': to_np(target[:10,0,:,:]),
-                        'pred_mask': to_np(m(output.data[:10,0,:,:])),
-                        'pred_wt': y_preds_wt[:10,:,:],
+                        'images': to_np(input[:4,:,:,:]),
+                        'gt_mask': to_np(target[:4,0,:,:]),
+                        'pred_mask': to_np(m(output.data[:4,0,:,:])),
+                        'pred_wt': y_preds_wt[:4,:,:],
                     }
                     for tag, images in info.items():
                         logger.image_summary(tag, images, valid_minib_counter)
