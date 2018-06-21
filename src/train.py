@@ -55,6 +55,7 @@ cv2.setNumThreads(0)
 # ============ basic params ============#
 parser.add_argument('--workers',             default=4,             type=int, help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs',              default=50,            type=int, help='number of total epochs to run')
+parser.add_argument('--epoch_fraction',      default=1.0,           type=float, help='break out of train/val loop on some fraction of the dataset - useful for huge datansets with shuffle')
 parser.add_argument('--start-epoch',         default=0,             type=int, help='manual epoch number (useful on restarts)')
 parser.add_argument('--batch-size',          default=64,            type=int, help='mini-batch size (default: 64)')
 # add here self-ensembling flags
@@ -410,6 +411,13 @@ def train(train_loader,
                    batch_time=batch_time,data_time=data_time,
                    loss=losses,bce_loss=bce_losses,dice_loss=dice_losses,
                    hard_dice=hard_dices))
+            
+        # break out of cycle early if required
+        # must be used with Dataloader shuffle = True
+        if args.epoch_fraction < 1.0:
+            if i > len(train_loader) * args.epoch_fraction:
+                print('Proceed to next epoch on {}/{}'.format(i,len(train_loader)))
+                break
 
     print(' * Avg Train Loss  {loss.avg:.4f}'.format(loss=losses))
     print(' * Avg Train HDICE {hard_dice.avg:.4f}'.format(hard_dice=hard_dices))
@@ -453,6 +461,8 @@ def validate(val_loader,
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
 
+        visualize_condition = (i % int(args.print_freq * 2 * args.epoch_fraction + 1) == 0)
+       
         # compute output
         output = model(input_var)
                                             
@@ -503,13 +513,14 @@ def validate(val_loader,
                 averaged_ars_wt.append(__[3])
 
             # apply colormap for easier tracking
-            if i % args.print_freq * 20 == 0:   
+            
+            if visualize_condition:
                 y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
                 y_preds_wt.append(y_pred_wt)
 
             # print('MAP for sample {} is {}'.format(img_sample[j],m_ap))
             
-        if i % args.print_freq * 20 == 0:
+        if visualize_condition:  
             y_preds_wt = np.asarray(y_preds_wt)
         
         averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
@@ -518,7 +529,7 @@ def validate(val_loader,
         #============ TensorBoard logging ============#                                            
         if args.tensorboard_images:
             # if i == 0:
-            if i % args.print_freq * 20 == 0:            
+            if visualize_condition:            
                 if target.size(1)==1:
                     info = {
                         'images': to_np(input[:4,:,:,:]),
@@ -569,7 +580,14 @@ def validate(val_loader,
                    i, len(val_loader), batch_time=batch_time,
                       loss=losses,hard_dices=hard_dices,
                       ap_scores=ap_scores,ar_scores=ar_scores))
-
+            
+        # break out of cycle early if required
+        # must be used with Dataloader shuffle = True
+        if args.epoch_fraction < 1.0:
+            if i > len(val_loader) * args.epoch_fraction:
+                print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
+                break
+                
     print(' * Avg Val  Loss  {loss.avg:.4f}'.format(loss=losses))
     print(' * Avg Val  HDICE {hard_dices.avg:.4f}'.format(hard_dices=hard_dices))
     print(' * Avg Val  AP    {ap_scores.avg:.4f}'.format(ap_scores=ap_scores)) 

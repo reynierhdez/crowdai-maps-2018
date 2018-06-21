@@ -40,6 +40,9 @@ class UNet11(nn.Module):
         self.dec1 = ConvRelu(num_filters * (2 + 1), num_filters)
 
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
+        
+        self.mean = (0.485, 0.456, 0.406)
+        self.std = (0.229, 0.224, 0.225)        
 
     def freeze(self):
         self.require_encoder_grad(False)
@@ -337,6 +340,9 @@ class UNet16(nn.Module):
         self.dec2 = DecoderBlockV2(128 + num_filters * 2, num_filters * 2 * 2, num_filters, is_deconv)
         self.dec1 = ConvRelu(64 + num_filters, num_filters)
         self.final = nn.Conv2d(num_filters, num_classes, kernel_size=1)
+        
+        self.mean = (0.485, 0.456, 0.406)
+        self.std = (0.229, 0.224, 0.225)        
         
     def freeze(self):
         self.require_encoder_grad(False)
