@@ -99,7 +99,7 @@ class SemsegLossWeighted(nn.Module):
 
         self.use_weight_mask = use_weight_mask
         
-        self.nll_loss = nn.BCEWithLogitsLoss()
+        self.nll_loss = F.binary_cross_entropy_with_logits()
         self.dice_weight = dice_weight
         self.bce_weight = bce_weight
         self.eps = eps
