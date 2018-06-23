@@ -196,7 +196,9 @@ class MapDataset(data.Dataset):
             m = m.reshape((img_meta['height'], img_meta['width']))
             
             if self.do_remove_small_on_borders:
-                if not self.is_on_border(m,2):
+                # do not add small masks on border
+                # but add at least one mask
+                if not self.is_on_border(m,2) or len(masks)==0:
                     masks.append(m)
             else:
                 masks.append(m)
