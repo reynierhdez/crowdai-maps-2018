@@ -316,8 +316,14 @@ class MapDataset(data.Dataset):
                 msk = msk.transpose((2,0,1))
             else:
                 msk = msk[np.newaxis,:,:]
-                
-            return img,msk,img_id
+            
+            # separate weights from masks for readability downstream
+            if self.do_produce_sizes_mask or self.do_produce_distances_mask:
+                weights = msk[-1,:,:]
+                msk = msk[:-1,:,:]
+                return img,msk,weights,img_id
+            else:
+                return img,msk,img_id
 
         elif self.mode == 'test':
             img = imread(self.test_paths[idx])

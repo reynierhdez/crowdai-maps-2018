@@ -37,7 +37,8 @@ from torch.nn import Sigmoid
 from models.model_params import model_presets
 
 #============ Loss ============#
-from models.Loss import HardDice,SemsegLoss
+from models.Loss import HardDice
+from models.Loss import SemsegLossWeighted as SemsegLoss
 
 #============ Utils and augs ============#
 from utils.LRScheduler import CyclicLR
@@ -196,7 +197,8 @@ def main():
         
         criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                bce_weight = args.bce_weight,
-                               dice_weight = args.dice_weight).cuda()
+                               dice_weight = args.dice_weight,
+                               use_weight_mask = True).cuda()
         
         hard_dice = HardDice(threshold=args.ths)        
 
@@ -262,7 +264,8 @@ def main():
 
         criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                bce_weight = args.bce_weight,
-                               dice_weight = args.dice_weight).cuda()
+                               dice_weight = args.dice_weight,
+                               use_weight_mask = True).cuda()
         
         hard_dice = HardDice(threshold=args.ths)
 
