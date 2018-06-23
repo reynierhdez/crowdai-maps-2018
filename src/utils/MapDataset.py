@@ -83,7 +83,15 @@ class MapDataset(data.Dataset):
                  do_energy_levels = True,
                  energy_levels = [1,5,9],
                  do_boundaries = False,
-                 do_size_jitter = False,
+                 
+                 do_remove_small_on_borders = False,
+                 do_produce_sizes_mask = False,
+                 do_produce_distances_mask= False,
+                 
+                 debug_masks = False,
+                 
+                 w0 = 5.0,
+                 sigma = 10.0,
                  
                  train_images_directory = "../data/train/images",
                  train_annotations_path = "../data/train/annotation.json",
@@ -110,8 +118,16 @@ class MapDataset(data.Dataset):
         self.energy_levels = energy_levels
         self.do_energy_levels = do_energy_levels
         self.do_boundaries = do_boundaries
-        self.do_size_jitter = do_size_jitter   
         self.do_energy_levels = do_energy_levels
+        
+        self.w0 = w0
+        self.sigma = sigma
+        
+        self.debug_masks = debug_masks
+        
+        self.do_remove_small_on_borders = do_remove_small_on_borders
+        self.do_produce_sizes_mask = do_produce_sizes_mask
+        self.do_produce_distances_mask = do_produce_distances_mask
                 
         if self.mode in ['train']:
             if os.path.isfile(PICKLED_TRAIN_ANNOTATIONS):
@@ -176,10 +192,53 @@ class MapDataset(data.Dataset):
             # m.shape has a shape of (300, 300, 1)
             # so we first convert it to a shape of (300, 300)
             m = m.reshape((img_meta['height'], img_meta['width']))
-            masks.append(m)
+            
+            if self.do_remove_small_on_borders:
+                if not self.is_on_border(m,2):
+                    masks.append(m)
+            else:
+                masks.append(m)
         
         return img,masks
+    
+    def get_size_weights(self,
+                         mask):
         
+        C = np.sqrt(mask.shape[0] * mask.shape[1]) / 2
+                      
+        sizes = np.ones_like(mask)
+        labeled = label(mask)
+        for label_nr in range(1, labeled.max() + 1):
+            label_size = (labeled == label_nr).sum()
+            sizes = np.where(labeled == label_nr, label_size, sizes)
+            
+        # check for errors
+        
+        sizes_ = sizes.copy()
+        sizes_[sizes == 0] = 1
+        size_weights = C / sizes_
+        
+        # all non-object areas get the weight of 1
+        size_weights[sizes_ == 1] = 1
+            
+        return size_weights.astype('float32')    
+    
+    def is_on_border(self,
+                     mask,
+                     border_width):
+        return not np.any(mask[border_width:-border_width, border_width:-border_width])    
+        
+    def distance_mask(self,
+                      mask):
+        
+        d = distance_transform_edt(1 - mask)
+        
+        
+        weights = np.ones_like(mask) + self.w0 * np.exp(-(np.power(d,2)) / (self.sigma ** 2))
+        weights[d == 0] = 1
+
+        return weights
+
     def __getitem__(self, idx):
         
         if self.mode == 'train':
@@ -218,7 +277,29 @@ class MapDataset(data.Dataset):
                 lst.extend(masks_thin)
 
             if self.do_boundaries:                
-                lst.extend([boundaries])     
+                lst.extend([boundaries])
+            
+            if self.debug_masks:
+                if self.do_produce_sizes_mask:
+                    lst.extend([self.get_size_weights(mask)])
+
+                if self.do_produce_distances_mask:
+                    lst.extend([self.distance_mask(mask)])
+            else:
+                _ = None
+                __ = None
+                
+                if self.do_produce_sizes_mask:
+                    _ = self.get_size_weights(mask)
+                if self.do_produce_distances_mask:
+                    __ = self.distance_mask(mask)    
+                    
+                if _ is not None and __ is not None:
+                    lst.extend([np.multiply(_,__)])
+                elif _ is not None:
+                    lst.extend([_])
+                elif __ is not None:
+                    lst.extend([__])                    
 
             # for _ in lst:
             #    print(_.shape)
