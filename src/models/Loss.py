@@ -99,7 +99,7 @@ class SemsegLossWeighted(nn.Module):
 
         self.use_weight_mask = use_weight_mask
         
-        self.nll_loss = F.binary_cross_entropy_with_logits()
+        self.nll_loss = nn.BCEWithLogitsLoss()
         self.dice_weight = dice_weight
         self.bce_weight = bce_weight
         self.eps = eps
@@ -136,9 +136,9 @@ class SemsegLossWeighted(nn.Module):
         assert outputs.size(3) == weights.size(2)
         
         if self.use_weight_mask:
-            bce_loss = self.nll_loss(input=outputs,
-                                     target=targets,
-                                     weight=weights)            
+            bce_loss = F.binary_cross_entropy_with_logits(input=outputs,
+                                                          target=targets,
+                                                          weight=weights)            
         else:
             bce_loss = self.nll_loss(input=outputs,
                                      target=targets)
