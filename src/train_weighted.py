@@ -567,6 +567,7 @@ def validate(val_loader,
                 if target.size(1)==1:
                     info = {
                         'images': to_np(input[:4,:,:,:]),
+                        'loss_weights': to_np(weight[:4,:,:,:]),
                         'gt_mask': to_np(target[:4,0,:,:]),
                         'pred_mask': to_np(m(output.data[:4,0,:,:])),
                         'pred_wt': y_preds_wt[:4,:,:],

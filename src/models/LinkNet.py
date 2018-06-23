@@ -797,6 +797,108 @@ class LinkInceptionResNet(nn.Module):
 
         return f5  
 
+class LinkDenseNet161(nn.Module):
+    def __init__(self,
+                 num_classes,
+                 num_channels = 3,
+                 is_deconv = False,
+                 decoder_kernel_size=4,
+                 pretrained=True
+                ):
+        super().__init__()
+
+        filters = [384, 768, 2112, 2208]
+        densenet = models.densenet161(pretrained=pretrained)
+        
+        self.mean = (0.485, 0.456, 0.406)
+        self.std = (0.229, 0.224, 0.225)
+
+        if num_channels==3:
+            self.firstconv = densenet.features.conv0
+        else:
+            self.firstconv = nn.Conv2d(num_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+        
+        self.stem = nn.Sequential(
+            self.firstconv,
+            densenet.features.norm0,
+            densenet.features.relu0,
+            densenet.features.pool0,
+        )
+        
+        self.encoder1 = nn.Sequential(densenet.features.denseblock1)
+        self.encoder2 = nn.Sequential(densenet.features.transition1,
+                                      densenet.features.denseblock2)
+        self.encoder3 = nn.Sequential(densenet.features.transition2,
+                                      densenet.features.denseblock3)
+        self.encoder4 = nn.Sequential(densenet.features.transition3,
+                                      densenet.features.denseblock4)
+                
+        # Decoder
+        self.decoder4 = DecoderBlock(in_channels=filters[3],
+                                     n_filters=filters[2],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+        self.decoder3 = DecoderBlock(in_channels=filters[2],
+                                     n_filters=filters[1],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+        self.decoder2 = DecoderBlock(in_channels=filters[1],
+                                     n_filters=filters[0],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)                                     
+        self.decoder1 = DecoderBlock(in_channels=filters[0],
+                                     n_filters=filters[0],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+
+        # Final Classifier
+        self.finaldeconv1 = nn.ConvTranspose2d(filters[0], 32, 3, stride=2)
+        self.finalrelu1 = nonlinearity(inplace=True)
+        self.finalconv2 = nn.Conv2d(32, 32, 3)
+        self.finalrelu2 = nonlinearity(inplace=True)
+        self.finalconv3 = nn.Conv2d(32, num_classes, 2, padding=1)
+    
+    def require_encoder_grad(self,requires_grad):
+        blocks = [self.stem,
+                  self.encoder1,
+                  self.encoder2,
+                  self.encoder3,
+                  self.encoder4]
+        
+        for block in blocks:
+            for p in block.parameters():
+                p.requires_grad = requires_grad
+            
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)            
+            
+    # noinspection PyCallingNonCallable
+    def forward(self, x):
+        # Encoder
+        x = self.stem(x)
+        e1 = self.encoder1(x)
+        e2 = self.encoder2(e1)
+        e3 = self.encoder3(e2)
+        e4 = self.encoder4(e3)
+
+        # Decoder with Skip Connections
+        d4 = self.decoder4(e4) + e3
+        d3 = self.decoder3(d4) + e2
+        d2 = self.decoder2(d3) + e1
+        d1 = self.decoder1(d2)
+
+        # Final Classification
+        f1 = self.finaldeconv1(d1)
+        f2 = self.finalrelu1(f1)
+        f3 = self.finalconv2(f2)
+        f4 = self.finalrelu2(f3)
+        f5 = self.finalconv3(f4)
+
+        return f5 
+
 class LinkDenseNet121(nn.Module):
     def __init__(self,
                  num_classes,
@@ -897,4 +999,4 @@ class LinkDenseNet121(nn.Module):
         f4 = self.finalrelu2(f3)
         f5 = self.finalconv3(f4)
 
-        return f5 
+        return f5     
