@@ -13,9 +13,11 @@ import pandas as pd
 from scipy import ndimage
 import torch.utils.data as data
 from skimage.draw import circle
+from skimage.measure import label
 from skimage.morphology import thin
 from skimage.io import imread,imread_collection
 from skimage.segmentation import find_boundaries
+from scipy.ndimage.morphology import distance_transform_edt
 
 from skimage.morphology import binary_dilation
 from skimage.morphology import disk
