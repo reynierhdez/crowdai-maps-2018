@@ -1,5 +1,5 @@
 # LinkNet based models
-from models.LinkNet import LinkNet18,LinkNet34,LinkNet50,LinkNet152,LinkNeXt,LinkDenseNet121,LinkDenseNet161
+from models.LinkNet import LinkNet18,LinkNet34,LinkNet50,LinkNet101,LinkNet152,LinkNeXt,LinkDenseNet121,LinkDenseNet161
 # Inception based models
 from models.LinkNet import LinkInceptionResNet,LinkCeption
 # Unet-based models
@@ -25,5 +25,6 @@ model_presets = {
     'linknext' : [LinkNeXt,{'num_channels':3,'num_classes':1,'is_deconv':False,'pretrained':True,'decoder_kernel_size':4}],
     'linkdensenet' : [LinkDenseNet121,{'num_channels':3,'num_classes':1,'is_deconv':False,'pretrained':True,'decoder_kernel_size':4}],
     'linkdensenet161' : [LinkDenseNet161,{'num_channels':3,'num_classes':1,'is_deconv':False,'pretrained':True,'decoder_kernel_size':4}],     
+    'linknet101' : [LinkNet101,{'num_channels':3,'num_classes':1,'is_deconv':False,'pretrained':True,'decoder_kernel_size':4}],    
     'linknet152' : [LinkNet152,{'num_channels':3,'num_classes':1,'is_deconv':False,'pretrained':True,'decoder_kernel_size':4}],
 }

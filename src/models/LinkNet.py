@@ -325,6 +325,106 @@ class LinkNet50(nn.Module):
 
         return f5        
 
+class LinkNet101(nn.Module):
+    def __init__(self,
+                 num_classes,
+                 num_channels=3,
+                 is_deconv = False,
+                 decoder_kernel_size=4,
+                 pretrained=True
+                ):
+        super().__init__()
+
+        filters = [256, 512, 1024, 2048]
+        resnet = models.resnet101(pretrained=pretrained)
+        
+        self.mean = (0.485, 0.456, 0.406)
+        self.std = (0.229, 0.224, 0.225)        
+
+        # self.firstconv = resnet.conv1
+        # assert num_channels == 3, "num channels not used now. to use changle first conv layer to support num channels other then 3"
+        # try to use 8-channels as first input
+        if num_channels==3:
+            self.firstconv = resnet.conv1
+        else:
+            self.firstconv = nn.Conv2d(num_channels, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3))
+            
+        self.firstbn = resnet.bn1
+        self.firstrelu = resnet.relu
+        self.firstmaxpool = resnet.maxpool
+        self.encoder1 = resnet.layer1
+        self.encoder2 = resnet.layer2
+        self.encoder3 = resnet.layer3
+        self.encoder4 = resnet.layer4
+        
+        # Decoder
+        self.decoder4 = DecoderBlock(in_channels=filters[3],
+                                     n_filters=filters[2],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+        self.decoder3 = DecoderBlock(in_channels=filters[2],
+                                     n_filters=filters[1],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+        self.decoder2 = DecoderBlock(in_channels=filters[1],
+                                     n_filters=filters[0],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)                                     
+        self.decoder1 = DecoderBlock(in_channels=filters[0],
+                                     n_filters=filters[0],
+                                     kernel_size=decoder_kernel_size,
+                                     is_deconv=is_deconv)
+        # Final Classifier
+        self.finaldeconv1 = nn.ConvTranspose2d(filters[0], 32, 3, stride=2)
+        self.finalrelu1 = nonlinearity(inplace=True)
+        self.finalconv2 = nn.Conv2d(32, 32, 3)
+        self.finalrelu2 = nonlinearity(inplace=True)
+        self.finalconv3 = nn.Conv2d(32, num_classes, 2, padding=1)
+
+    def freeze(self):
+        self.require_encoder_grad(False)
+        
+    def unfreeze(self):
+        self.require_encoder_grad(True)        
+        
+    def require_encoder_grad(self,requires_grad):
+        blocks = [self.firstconv,
+                  self.encoder1,
+                  self.encoder2,
+                  self.encoder3,
+                  self.encoder4]
+        
+        for block in blocks:
+            for p in block.parameters():
+                p.requires_grad = requires_grad        
+        
+    # noinspection PyCallingNonCallable
+    def forward(self, x):
+        # Encoder
+        x = self.firstconv(x)
+        x = self.firstbn(x)
+        x = self.firstrelu(x)
+        x = self.firstmaxpool(x)
+        e1 = self.encoder1(x)
+        e2 = self.encoder2(e1)
+        e3 = self.encoder3(e2)
+        e4 = self.encoder4(e3)        
+        
+        # Decoder with Skip Connections
+        d4 = self.decoder4(e4) + e3
+        d3 = self.decoder3(d4) + e2
+        d2 = self.decoder2(d3) + e1
+        d1 = self.decoder1(d2)
+
+        # Final Classification
+        f1 = self.finaldeconv1(d1)
+        f2 = self.finalrelu1(f1)
+        f3 = self.finalconv2(f2)
+        f4 = self.finalrelu2(f3)
+        f5 = self.finalconv3(f4)
+
+        return f5            
+    
 class LinkNeXt(nn.Module):
     def __init__(self,
                  num_classes,
