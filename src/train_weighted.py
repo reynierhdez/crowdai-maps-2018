@@ -75,9 +75,10 @@ parser.add_argument('--img_size',            default=300,           type=int, he
 
 # ============ optimization params ============#
 parser.add_argument('--lr',                  default=1e-3,          type=float, help='initial learning rate')
-parser.add_argument('--m0',                  default=10,            type=int, help='encoder unfreeze milestone')
-parser.add_argument('--m1',                  default=10,            type=int, help='lr decay milestone 1')
-parser.add_argument('--m2',                  default=30,            type=int, help='lr decay milestone 2')
+parser.add_argument('--m0',                  default=5,             type=int, help='encoder unfreeze milestone')
+parser.add_argument('--m1',                  default=5,             type=int, help='lr decay milestone 1')
+parser.add_argument('--m2',                  default=20,            type=int, help='lr decay milestone 2')
+parser.add_argument('--m3',                  default=30,            type=int, help='dice boost milestone')
 parser.add_argument('--optimizer',           default='adam',        type=str, help='model optimizer')
 parser.add_argument('--do_running_mean',     default=False,         type=str2bool, help='Whether to use running mean for loss')
 parser.add_argument('--bce_weight',          default=0.5,           type=float, help='BCE loss weight')
@@ -158,8 +159,12 @@ def main():
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])            
             print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+            
+            loaded_from_checkpoint = True
         else:
-            print("=> no checkpoint found at '{}'".format(args.resume))      
+            print("=> no checkpoint found at '{}'".format(args.resume))
+    else:
+        loaded_from_checkpoint = False
     
     # freeze the encoder
     print('Trainable param groups BEFORE freeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))     
@@ -272,12 +277,49 @@ def main():
         scheduler = MultiStepLR(optimizer, milestones=[args.m1,args.m2], gamma=0.1)  
 
         for epoch in range(args.start_epoch, args.epochs):
-            if epoch==args.m0:
+            
+            if loaded_from_checkpoint == False:
+                
+                if epoch==args.m0:
+                    print('Trainable param groups BEFORE UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))                  
+                    model.module.unfreeze()
+                    print('Encoder unfrozen!')
+                    print('Trainable param groups AFTER UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))              
+
+                    if args.optimizer.startswith('adam'):
+                        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                                                     # Only finetunable params
+                                                     lr=args.lr)
+                    elif args.optimizer.startswith('rmsprop'):
+                        optimizer = torch.optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()),
+                                                        # Only finetunable params
+                                                        lr=args.lr)
+                    elif args.optimizer.startswith('sgd'):
+                        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
+                                                    # Only finetunable params
+                                                    lr=args.lr)
+                    else:
+                        raise ValueError('Optimizer not supported')
+
+                    # we are assuming that m0 <= m1
+                    scheduler = MultiStepLR(optimizer, milestones=[args.m1-args.m0,args.m2-args.m0], gamma=0.1)                     
+
+                if epoch==args.m3:
+                    criterion = SemsegLoss(use_running_mean = args.do_running_mean,
+                                           bce_weight = args.bce_weight,
+                                           dice_weight = args.dice_weight * 10.0,
+                                           use_weight_mask = True).cuda()
+            else:
+                # if started from checkpoint
+                # then unfreeze encoder 
+                # then just tune using high dice
+                # do not use lr decay anymore
+
                 print('Trainable param groups BEFORE UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))                  
                 model.module.unfreeze()
                 print('Encoder unfrozen!')
-                print('Trainable param groups AFTER UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))              
-
+                print('Trainable param groups AFTER UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))      
+                
                 if args.optimizer.startswith('adam'):
                     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
                                                  # Only finetunable params
@@ -293,9 +335,15 @@ def main():
                 else:
                     raise ValueError('Optimizer not supported')
 
-                # we are assuming that m0 <= m1
-                scheduler = MultiStepLR(optimizer, milestones=[args.m1-args.m0,args.m2-args.m0], gamma=0.1)                     
-            
+                scheduler = MultiStepLR(optimizer, milestones=[1000], gamma=0.1)                     
+
+                criterion = SemsegLoss(use_running_mean = args.do_running_mean,
+                                       bce_weight = args.bce_weight,
+                                       dice_weight = args.dice_weight * 10.0,
+                                       use_weight_mask = True).cuda()
+                
+                print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
+                
             # adjust_learning_rate(optimizer, epoch)
 
             # train for one epoch
@@ -305,8 +353,6 @@ def main():
                                                                               hard_dice,
                                                                               optimizer,
                                                                               epoch)
-                                                                              
-
 
             # evaluate on validation set
             val_loss,val_bce_loss,val_dice_loss,val_hard_dice,val_ap,val_ar = validate(val_loader,
