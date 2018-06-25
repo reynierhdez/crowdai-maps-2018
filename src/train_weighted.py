@@ -320,6 +320,15 @@ def main():
                 print('Encoder unfrozen!')
                 print('Trainable param groups AFTER UNfreeze {}'.format(len(list(filter(lambda p: p.requires_grad, model.module.parameters())))))      
                 
+                scheduler = MultiStepLR(optimizer, milestones=[1000], gamma=0.1)                     
+
+                criterion = SemsegLoss(use_running_mean = args.do_running_mean,
+                                       bce_weight = args.bce_weight,
+                                       dice_weight = args.dice_weight * 10.0,
+                                       use_weight_mask = True).cuda()
+                
+                print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
+                
                 if args.optimizer.startswith('adam'):
                     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
                                                  # Only finetunable params
@@ -333,16 +342,7 @@ def main():
                                                 # Only finetunable params
                                                 lr=args.lr)
                 else:
-                    raise ValueError('Optimizer not supported')
-
-                scheduler = MultiStepLR(optimizer, milestones=[1000], gamma=0.1)                     
-
-                criterion = SemsegLoss(use_running_mean = args.do_running_mean,
-                                       bce_weight = args.bce_weight,
-                                       dice_weight = args.dice_weight * 10.0,
-                                       use_weight_mask = True).cuda()
-                
-                print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
+                    raise ValueError('Optimizer not supported')           
                 
             # adjust_learning_rate(optimizer, epoch)
 
