@@ -274,7 +274,12 @@ def main():
         
         hard_dice = HardDice(threshold=args.ths)
 
-        scheduler = MultiStepLR(optimizer, milestones=[args.m1,args.m2], gamma=0.1)  
+        if args.m1<args.m2:
+            milestones = [args.m1,args.m2]
+        else:
+            milestones = [args.m1]
+            
+        scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=0.1)  
 
         for epoch in range(args.start_epoch, args.epochs):
             
@@ -302,7 +307,13 @@ def main():
                         raise ValueError('Optimizer not supported')
 
                     # we are assuming that m0 <= m1
-                    scheduler = MultiStepLR(optimizer, milestones=[args.m1-args.m0,args.m2-args.m0], gamma=0.1)                     
+                    
+                    if args.m1<args.m2:
+                        milestones = [args.m1-args.m0,args.m2-args.m0]
+                    else:
+                        milestones = [args.m1-args.m0]
+                    
+                    scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=0.1)                     
 
                 if epoch==args.m3:
                     criterion = SemsegLoss(use_running_mean = args.do_running_mean,

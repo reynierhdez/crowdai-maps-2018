@@ -3,7 +3,7 @@ from models.LinkNet import LinkNet18,LinkNet34,LinkNet50,LinkNet101,LinkNet152,L
 # Inception based models
 from models.LinkNet import LinkInceptionResNet,LinkCeption
 # Unet-based models
-from models.UNet import UnetResnet18,UnetResnet34,UNet11,UNet16,UnetResnet152
+from models.UNet import UnetResnet18,UnetResnet34,UNet11,UNet16,UnetResnet152,UnetResnet101
 
 model_presets = {
     # inception-based models
@@ -15,6 +15,7 @@ model_presets = {
     'unet16' : [UNet16,{'num_classes':1,'is_deconv':False,'pretrained':True}],
     'uresnet18' : [UnetResnet18,{'num_classes':1,'is_deconv':False,'pretrained':True}],    
     'uresnet34' : [UnetResnet34,{'num_classes':1,'is_deconv':False,'pretrained':True}],
+    'uresnet101' : [UnetResnet101,{'num_classes':1,'is_deconv':False,'pretrained':True, "num_filters":64}],    
     'uresnet152' : [UnetResnet152,{'num_classes':1,'is_deconv':False,'pretrained':True, "num_filters":64}],
     
     # linknet-based models
