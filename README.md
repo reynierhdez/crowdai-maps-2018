@@ -6,6 +6,8 @@ First
 ```
 cd src
 ```
+
+
 Then
 ```
 # 3 GPU training, ~10 images per GPU
