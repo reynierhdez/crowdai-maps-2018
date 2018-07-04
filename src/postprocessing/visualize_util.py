@@ -107,8 +107,18 @@ def compute_precision_recall(TPs, FPs, FNs):
     FPs -- number of false positives
     FNs -- number of false negatives
     '''
-    precision = TPs/(TPs + FPs)
-    recall = TPs/(TPs + FNs)
+    if (TPs + FPs + FNs) == 0:
+        precision = 1
+        recall = 1
+    elif (TPs + FPs) == 0:
+        recall = 0
+        precision = 0
+    elif (TPs + FNs) == 0:
+        recall = 0
+        precision = 0
+    else:
+        precision = TPs/(TPs + FPs)
+        recall = TPs/(TPs + FNs)
     
     return precision, recall
 
