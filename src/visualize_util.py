@@ -151,7 +151,6 @@ def mix_vis_masks(gtmask,
     precision, recall = compute_precision_recall(TPs, FPs, FNs)
     
     if do_vis:
-        
         gtmask_lbl = label_baseline(gtmask, lbl_treshold)
         genmask_lbl = label_baseline(genmask, lbl_treshold)
     
@@ -168,8 +167,6 @@ def mix_vis_masks(gtmask,
         ax[1].set_title('Original Img')
         ax[0].axis('off')
         ax[1].axis('off')
-
-        if do_save:
-            plt.savefig(os.path.join(save_path, save_title))
+        plt.savefig(os.path.join(save_path, save_title))
     
     return precision, recall, TPs, FPs, FNs
