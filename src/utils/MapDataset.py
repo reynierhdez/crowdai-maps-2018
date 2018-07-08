@@ -94,6 +94,7 @@ class MapDataset(data.Dataset):
                  
                  w0 = 5.0,
                  sigma = 10.0,
+                 size_divisor = 2.0,
                  
                  train_images_directory = "../data/train/images",
                  train_annotations_path = "../data/train/annotation.json",
@@ -124,6 +125,7 @@ class MapDataset(data.Dataset):
         
         self.w0 = w0
         self.sigma = sigma
+        self.size_divisor = size_divisor
         
         self.debug_masks = debug_masks
         
@@ -208,7 +210,7 @@ class MapDataset(data.Dataset):
     def get_size_weights(self,
                          mask):
         
-        C = np.sqrt(mask.shape[0] * mask.shape[1]) / 2
+        C = np.sqrt(mask.shape[0] * mask.shape[1]) / self.size_divisor
                       
         sizes = np.ones_like(mask)
         labeled = label(mask)

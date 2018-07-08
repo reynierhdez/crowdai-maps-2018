@@ -87,8 +87,9 @@ parser.add_argument('--do_running_mean',     default=False,         type=str2boo
 parser.add_argument('--bce_weight',          default=0.5,           type=float, help='BCE loss weight')
 parser.add_argument('--dice_weight',         default=0.5,           type=float, help='DICE loss weight')
 
-parser.add_argument('--w0',                  default=5.0,           type=float, help='DICE loss weight')
-parser.add_argument('--sigma',               default=10.0,          type=float, help='DICE loss weight')
+parser.add_argument('--w0',                  default=5.0,           type=float, help='Param for distance weighting')
+parser.add_argument('--sigma',               default=10.0,          type=float, help='Param for distance weighting')
+parser.add_argument('--size_divisor',        default=2.0,           type=float, help='Param for mask size weighting')
 
 parser.add_argument('--do_remove_small_on_borders',     default=False,         type=str2bool, help='Whether to use running mean for loss')
 parser.add_argument('--do_produce_sizes_mask',          default=False,         type=str2bool, help='Whether to use running mean for loss')
@@ -237,6 +238,7 @@ def main():
                                    do_boundaries = args.do_boundaries,
                                    w0 = args.w0,
                                    sigma = args.sigma,
+                                   size_divisor = args.size_divisor,
                                    do_remove_small_on_borders = args.do_remove_small_on_borders,
                                    do_produce_sizes_mask = args.do_produce_sizes_mask,
                                    do_produce_distances_mask = args. do_produce_distances_mask                                  
@@ -249,6 +251,7 @@ def main():
                                  do_boundaries = args.do_boundaries,
                                  w0 = args.w0,
                                  sigma = args.sigma,
+                                 size_divisor = args.size_divisor,
                                  do_remove_small_on_borders = args.do_remove_small_on_borders,
                                  do_produce_sizes_mask = args.do_produce_sizes_mask,
                                  do_produce_distances_mask = args. do_produce_distances_mask
