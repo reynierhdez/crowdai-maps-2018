@@ -49,6 +49,9 @@ from utils.Watershed import label_baseline as wt_baseline
 from aug.AugPresets import TrainAugsIaa,TrainAugs,ValAugs
 from utils.Util import str2bool,restricted_float,to_np
 
+#============ Precision, Recall computing and visualizing util ============#
+from visualize_util import mix_vis_masks
+
 parser = argparse.ArgumentParser(description='CrowdAI mapping challenge params')
 
 cv2.setNumThreads(0)
@@ -207,10 +210,10 @@ def main():
         
         hard_dice = HardDice(threshold=args.ths)        
 
-        val_loss,val_bce_loss,val_dice_loss,val_hard_dice,val_ap,val_ar = validate(val_loader,
-                                                                                   model,
-                                                                                   criterion,
-                                                                                   hard_dice)
+        val_ap,val_ar = evaluate(val_loader,
+                                 model,
+                                 criterion,
+                                 hard_dice)
     else:
         if args.do_augs:
             train_augs = TrainAugs(prob = args.aug_prob,
@@ -686,6 +689,188 @@ def validate(val_loader,
     print(' * Avg Val  AR    {ar_scores.avg:.4f}'.format(ar_scores=ar_scores)) 
 
     return losses.avg, bce_losses.avg, dice_losses.avg,hard_dices.avg,ap_scores.avg,ar_scores.avg
+
+def evaluate(val_loader,
+              model,
+              criterion,
+              hard_dice, 
+              save_freq = 100 
+             ):
+    '''
+    Validation function with some visualizations and different implementation of target metric
+    
+    Keyword arguments:
+    val_loader -- dataset loader for validation
+    model -- model to validate
+    criterion -- criterion object
+    hard_dice -- hard dice object
+    save_freq -- frequency of saving visualized results
+    '''
+                                
+    global valid_minib_counter
+    global logger
+    
+    batch_time = AverageMeter()
+    
+    ap_scores = AverageMeter()
+    ar_scores = AverageMeter()
+    
+    ap_scores2 = AverageMeter()
+    ar_scores2 = AverageMeter()
+    
+    # switch to evaluate mode
+    model.eval() 
+    
+    m = nn.Sigmoid() 
+    
+    end = time.time()
+    
+    prere = pd.DataFrame(columns = ['img_id', 'img_saved_id', 'pre', 're', 'TPs', 'FPs', 'FNs', 'Pre_ave', 'Re_ave'])
+    
+    for i, (input, target, weight, img_ids) in enumerate(val_loader):
+        
+        input = input.float().cuda(async=True)
+        target = target.float().cuda(async=True)
+        weight = weight.float().cuda(async=True)
+        
+        input_var = torch.autograd.Variable(input, volatile=True)
+        target_var = torch.autograd.Variable(target, volatile=True)
+        weight_var = torch.autograd.Variable(weight)
+        
+        visualize_condition = (i % int(save_freq) == 0)
+       
+        # compute output
+        output = model(input_var)
+        
+        averaged_aps_wt = []
+        averaged_ars_wt = []
+        averaged_aps_wt2 = []
+        averaged_ars_wt2 = []
+        y_preds_wt = []
+            
+        for j,pred_output in enumerate(output):
+            pred_mask = m(pred_output[0,:,:]).data.cpu().numpy()
+            
+            pred_mask_255 = np.copy(pred_mask) * 255 #?        
+            
+            pre, re, TPs, FPs, FNs = mix_vis_masks(gtmask = target[j,0,:,:].cpu().numpy()*255, 
+                  genmask = pred_mask_255, 
+                  orig = input[j,0,:,:].cpu().numpy()*255, 
+                  lbl_treshold = args.ths, 
+                  save_path = 'saved_imgs', 
+                  save_title = '{}_{}_{}.png'.format(img_ids[j], i, j), 
+                  do_vis = visualize_condition,
+                  do_save = visualize_condition)
+            
+            if visualize_condition:
+                img_saved_id = '{}_{}_{}.png'.format(img_ids[j], i, j)
+            else:
+                img_saved_id = np.nan
+            
+            averaged_aps_wt2.append(pre)
+            averaged_ars_wt2.append(re)
+            # print('pre: {}, re: {}'.format(pre, re))
+
+            # !!!
+            # for baseline - assume that in the ground-truths buildings are not touching
+            # otherwise - add additional output to the generator
+            gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
+            num_buildings = gt_labels.max()
+            gt_masks = []
+
+            for _ in range(1,num_buildings+1):
+                gt_masks.append((gt_labels==_)*1) 
+            
+            aps = 0
+            ars = 0
+            
+            if num_buildings==0:
+                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+                
+                if y_pred_wt.max()==0:
+                    aps = 1
+                    ars = 1
+                else:
+                    aps = 0
+                    ars = 0                   
+            else:
+                # simple wt
+                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+            
+                __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
+                aps = __[1]
+                ars = __[3]
+
+            # apply colormap for easier tracking
+            averaged_aps_wt.append(aps)
+            averaged_ars_wt.append(ars)
+            
+            prere_samp = pd.DataFrame(columns = ['img_id', 'img_saved_id', 'pre', 're', 'TPs', 'FPs', 'FNs', 'Pre_ave', 'Re_ave'])
+            prere_samp.loc[0] = [img_ids[j], img_saved_id, pre, re, TPs, FPs, FNs, aps, ars]
+            prere = pd.concat([prere, prere_samp], ignore_index = True)
+            if visualize_condition:
+                y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
+                y_preds_wt.append(y_pred_wt)
+                
+        # measure accuracy
+        
+        averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
+        averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
+        
+        averaged_aps_wt2 = np.asarray(averaged_aps_wt2).mean()
+        averaged_ars_wt2 = np.asarray(averaged_ars_wt2).mean()
+        
+        ap_scores.update(averaged_aps_wt, input.size(0))
+        ar_scores.update(averaged_ars_wt, input.size(0))
+        
+        ap_scores2.update(averaged_aps_wt2, input.size(0))
+        ar_scores2.update(averaged_ars_wt2, input.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        #============ TensorBoard logging ============#
+        # Log the scalar values        
+        if args.tensorboard:
+            info = {
+                'val_ap_score': ap_scores.val,
+                'val_ar_score': ar_scores.val,
+                'val_ap_score2': ap_scores2.val,
+                'val_ar_score2': ar_scores2.val,
+
+            }
+            for tag, value in info.items():
+                logger.scalar_summary(tag, value, valid_minib_counter)            
+        
+        valid_minib_counter += 1
+        
+        if i % args.print_freq == 0:
+            print('Test: [{0}/{1}]\t'
+                  'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                  'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
+                  'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'
+                  'AP2    {ap_scores2.val:.4f} ({ap_scores2.avg:.4f})\t'
+                  'AR2    {ar_scores2.val:.4f} ({ar_scores2.avg:.4f})\t'.format(
+                   i, len(val_loader), batch_time=batch_time,
+                      ap_scores=ap_scores,ar_scores=ar_scores,
+                      ap_scores2=ap_scores2,ar_scores2=ar_scores2))
+            
+        # break out of cycle early if required
+        # must be used with Dataloader shuffle = True
+        if args.epoch_fraction < 1.0:
+            if i > len(val_loader) * args.epoch_fraction:
+                print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
+                break
+
+    print(' * Avg Val  AP    {ap_scores.avg:.4f}'.format(ap_scores=ap_scores))
+    print(' * Avg Val  AR    {ar_scores.avg:.4f}'.format(ar_scores=ar_scores))
+    print(' * Avg Val  AP2    {ap_scores2.avg:.4f}'.format(ap_scores2=ap_scores2))
+    print(' * Avg Val  AR2    {ar_scores2.avg:.4f}'.format(ar_scores2=ar_scores2))
+    
+    prere.to_csv('prere.csv', index = False)
+    
+    return pre, re
 
 def predict(val_loader, model):
     pass
