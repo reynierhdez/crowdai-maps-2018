@@ -2,6 +2,7 @@
 import numpy as np
 from skimage.measure import label
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 import os
 import itertools
 
@@ -163,7 +164,7 @@ def mix_vis_masks(gtmask,
             ax[0].text(centerx, centery, '{:.2f}'.format(value), weight = 'bold', color = 'black', size = 14)
 
         ax[1].imshow(orig)
-        ax[0].set_title('Pr: {:.2f}, Re: {:.2f}, FPs: {:.2f}, TPs: {:.2f}, FNs: {:.2f}'.format(precision, recall, TPs, FPs, FNs))
+        ax[0].set_title('Pr: {:.2f}, Re: {:.2f}, TPs: {:.2f}, FPs: {:.2f}, FNs: {:.2f}'.format(precision, recall, TPs, FPs, FNs))
         ax[1].set_title('Original Img')
         ax[0].axis('off')
         ax[1].axis('off')
@@ -171,4 +172,4 @@ def mix_vis_masks(gtmask,
         if do_save:
             plt.savefig(os.path.join(save_path, save_title))
     
-    return precision, recall
+    return precision, recall, TPs, FPs, FNs
