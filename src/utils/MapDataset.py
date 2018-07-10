@@ -211,6 +211,9 @@ class MapDataset(data.Dataset):
                          mask):
         
         C = np.sqrt(mask.shape[0] * mask.shape[1]) / self.size_divisor
+
+        # standard_C = np.sqrt(mask.shape[0] * mask.shape[1]) / 2.0
+        # print('Current C {} vs. baseline {}'.format(C,standard_C))
                       
         sizes = np.ones_like(mask)
         labeled = label(mask)
