@@ -92,7 +92,7 @@ class MapDataset(data.Dataset):
                  
                  debug_masks = False,
                  
-                 w0 = 5.0,
+                 w0 = 50.0,
                  sigma = 10.0,
                  size_divisor = 2.0,
                  
@@ -240,12 +240,23 @@ class MapDataset(data.Dataset):
     def distance_mask(self,
                       mask):
         
-        d = distance_transform_edt(1 - mask)
-        
-        
-        weights = np.ones_like(mask) + self.w0 * np.exp(-(np.power(d,2)) / (self.sigma ** 2))
-        weights[d == 0] = 1
-
+        dist_masks = []
+        weights = np.ones_like(mask)
+        for i in np.unique(label(mask)):
+            if i == 0:
+                continue
+            mask_label = (label(mask) == i) * 1
+            dist_mask = distance_transform_edt(1 - mask_label)
+            dist_masks.append(dist_mask)
+        if not dist_masks:
+            return weights
+        dist_masks = np.stack(dist_masks)
+        if dist_masks.shape[0] < 2:
+            two_close_sum = dist_masks[0]   
+        else: two_close_sum = np.sort(dist_masks, 0)[0] + np.sort(dist_masks, 0)[1]    
+        weights = weights + self.w0 * np.exp(-(np.power(two_close_sum,2)) / (self.sigma ** 2))
+        weights[mask == 1] = 1
+    
         return weights
 
     def __getitem__(self, idx):

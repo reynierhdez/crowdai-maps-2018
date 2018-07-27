@@ -16,8 +16,8 @@ class HardDice(nn.Module):
         hard_output = (dice_output > self.threshold).float()
         
         intersection = (hard_output * dice_target).sum()
-        union = hard_output.sum() + dice_target.sum() + eps
-        hard_dice = (1+torch.log(2 * intersection / union))
+        union = hard_output.sum() + dice_target.sum()
+        hard_dice = (1+torch.log(2 * intersection / (union - intersection +eps)))
         hard_dice = torch.clamp(hard_dice,0,1)
         
         return hard_dice
