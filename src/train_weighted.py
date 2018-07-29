@@ -62,6 +62,8 @@ parser.add_argument('--epochs',              default=50,            type=int, he
 parser.add_argument('--epoch_fraction',      default=1.0,           type=float, help='break out of train/val loop on some fraction of the dataset - useful for huge datansets with shuffle')
 parser.add_argument('--start-epoch',         default=0,             type=int, help='manual epoch number (useful on restarts)')
 parser.add_argument('--batch-size',          default=64,            type=int, help='mini-batch size (default: 64)')
+
+parser.add_argument('--seed',                default=42,            type=int, help='random seed (default: 42)')
 # add here self-ensembling flags
 
 # ============ data loader and model params ============#
@@ -119,6 +121,12 @@ assert args.m0 <= args.m1
 # add fold number to the lognumber 
 # if not (args.predict or args.predict_train):
 #    args.lognumber = args.lognumber + '_fold' + str(args.fold_num)
+
+# PyTorch 0.4 compatibility
+args.cuda = torch.cuda.is_available()
+torch.manual_seed(args.seed)
+device = torch.device("cuda" if args.cuda else "cpu")
+kwargs = {'num_workers': 0, 'pin_memory': True} if args.cuda else {}
 
 # Set the Tensorboard logger
 if args.tensorboard or args.tensorboard_images:
@@ -326,9 +334,6 @@ def main():
                                            bce_weight = args.bce_weight,
                                            dice_weight = args.dice_weight * 10.0,
                                            use_weight_mask = True).cuda()
-                    
-                    print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
-                    
             else:
                 # if started from checkpoint
                 # then unfreeze encoder 
@@ -450,19 +455,25 @@ def train(train_loader,
         # measure data loading time
         data_time.update(time.time() - end)
 
-        input = input.float().cuda(async=True)
-        target = target.float().cuda(async=True)
-        weight = weight.float().cuda(async=True)
+        #input = input.float().cuda(async=True)
+        #target = target.float().cuda(async=True)
+        #weight = weight.float().cuda(async=True)
+        input = input.float().to(device)
+        target = target.float().to(device)                    
+        weight = weight.float().to(device)
 
-        input_var = torch.autograd.Variable(input)
-        target_var = torch.autograd.Variable(target)
-        weight_var = torch.autograd.Variable(weight)
+        #input_var = torch.autograd.Variable(input)
+        #target_var = torch.autograd.Variable(target)
+        #weight_var = torch.autograd.Variable(weight)
 
         # compute output
-        output = model(input_var)
+        #output = model(input_var)
+        output = model(input)
                                             
-        loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
-        hard_dice_ = hard_dice(output, target_var)
+        #loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
+        #hard_dice_ = hard_dice(output, target_var)
+        loss,bce_loss,dice_loss = criterion(output, target, weight)
+        hard_dice_ = hard_dice(output, target)
         
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -551,143 +562,150 @@ def validate(val_loader,
     m = nn.Sigmoid()      
     
     end = time.time()
-    for i, (input, target, weight, img_ids) in enumerate(val_loader):
-        
-        input = input.float().cuda(async=True)
-        target = target.float().cuda(async=True)
-        weight = weight.float().cuda(async=True)
-        
-        input_var = torch.autograd.Variable(input, volatile=True)
-        target_var = torch.autograd.Variable(target, volatile=True)
-        weight_var = torch.autograd.Variable(weight)
-        
-        visualize_condition = (i % int(args.print_freq * 2 * args.epoch_fraction + 1) == 0)
-       
-        # compute output
-        output = model(input_var)
-                                            
-        loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
-        hard_dice_ = hard_dice(output, target_var)
-        
-        # go over all of the predictions
-        # apply the transformation to each mask
-        # calculate score for each of the images
-        
-        averaged_aps_wt = []
-        averaged_ars_wt = []
-        y_preds_wt = []
-            
-        for j,pred_output in enumerate(output):
-            pred_mask = m(pred_output[0,:,:]).data.cpu().numpy()
+    with torch.no_grad():
+        for i, (input, target, weight, img_ids) in enumerate(val_loader):
 
-            # pred_mask = cv2.resize(pred_mask, (or_h,or_w), interpolation=cv2.INTER_LINEAR)
-            # pred_energy = (pred_mask+pred_mask1+pred_mask2+pred_mask3+pred_mask0)/5*255
-            
-            pred_mask_255 = np.copy(pred_mask) * 255            
-            # !!!
-            # for baseline - assume that in the ground-truths buildings are not touching
-            # otherwise - add additional output to the generator
-            gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
-            num_buildings = gt_labels.max()
-            gt_masks = []
+            input = input.float().to(device)
+            target = target.float().to(device)
+            weight = weight.float().to(device)
+            #input = input.float().cuda(async=True)
+            #target = target.float().cuda(async=True)
+            #weight = weight.float().cuda(async=True)
 
-            for _ in range(1,num_buildings+1):
-                gt_masks.append((gt_labels==_)*1) 
-                
-            if num_buildings==0:
-                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
-                
-                if y_pred_wt.max()==0:
-                    averaged_aps_wt.append(1)
-                    averaged_ars_wt.append(1)
+            #input_var = torch.autograd.Variable(input, volatile=True)
+            #target_var = torch.autograd.Variable(target, volatile=True)
+            #weight_var = torch.autograd.Variable(weight)
+
+            visualize_condition = (i % int(args.print_freq * 2 * args.epoch_fraction + 1) == 0)
+
+            # compute output
+            #output = model(input_var)
+            output = model(input)
+
+            #loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
+            #hard_dice_ = hard_dice(output, target_var)
+            loss,bce_loss,dice_loss = criterion(output, target, weight)
+            hard_dice_ = hard_dice(output, target)
+
+            # go over all of the predictions
+            # apply the transformation to each mask
+            # calculate score for each of the images
+
+            averaged_aps_wt = []
+            averaged_ars_wt = []
+            y_preds_wt = []
+
+            for j,pred_output in enumerate(output):
+                pred_mask = m(pred_output[0,:,:]).data.cpu().numpy()
+
+                # pred_mask = cv2.resize(pred_mask, (or_h,or_w), interpolation=cv2.INTER_LINEAR)
+                # pred_energy = (pred_mask+pred_mask1+pred_mask2+pred_mask3+pred_mask0)/5*255
+
+                pred_mask_255 = np.copy(pred_mask) * 255            
+                # !!!
+                # for baseline - assume that in the ground-truths buildings are not touching
+                # otherwise - add additional output to the generator
+                gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
+                num_buildings = gt_labels.max()
+                gt_masks = []
+
+                for _ in range(1,num_buildings+1):
+                    gt_masks.append((gt_labels==_)*1) 
+
+                if num_buildings==0:
+                    y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+
+                    if y_pred_wt.max()==0:
+                        averaged_aps_wt.append(1)
+                        averaged_ars_wt.append(1)
+                    else:
+                        averaged_aps_wt.append(0)
+                        averaged_ars_wt.append(0)                   
                 else:
-                    averaged_aps_wt.append(0)
-                    averaged_ars_wt.append(0)                   
-            else:
-                # simple wt
-                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
-            
-                __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
+                    # simple wt
+                    y_pred_wt = wt_baseline(pred_mask_255, args.ths)
 
-                averaged_aps_wt.append(__[1])
-                averaged_ars_wt.append(__[3])
+                    __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
 
-            # apply colormap for easier tracking
-            
-            if visualize_condition:
-                y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
-                y_preds_wt.append(y_pred_wt)
+                    averaged_aps_wt.append(__[1])
+                    averaged_ars_wt.append(__[3])
 
-            # print('MAP for sample {} is {}'.format(img_sample[j],m_ap))
-            
-        if visualize_condition:  
-            y_preds_wt = np.asarray(y_preds_wt)
-        
-        averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
-        averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
+                # apply colormap for easier tracking
 
-        #============ TensorBoard logging ============#                                            
-        if args.tensorboard_images:
-            # if i == 0:
-            if visualize_condition:            
-                if target.size(1)==1:
-                    info = {
-                        'images': to_np(input[:4,:,:,:]),
-                        'loss_weights': to_np(weight[:4,:,:]),
-                        'gt_mask': to_np(target[:4,0,:,:]),
-                        'pred_mask': to_np(m(output.data[:4,0,:,:])),
-                        'pred_wt': y_preds_wt[:4,:,:],
-                    }
-                    for tag, images in info.items():
-                        logger.image_summary(tag, images, valid_minib_counter)
+                if visualize_condition:
+                    y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
+                    y_preds_wt.append(y_pred_wt)
+
+                # print('MAP for sample {} is {}'.format(img_sample[j],m_ap))
+
+            if visualize_condition:  
+                y_preds_wt = np.asarray(y_preds_wt)
+
+            averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
+            averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
+
+            #============ TensorBoard logging ============#                                            
+            if args.tensorboard_images:
+                # if i == 0:
+                if visualize_condition:            
+                    if target.size(1)==1:
+                        info = {
+                            'images': to_np(input[:4,:,:,:]),
+                            'loss_weights': to_np(weight[:4,:,:]),
+                            'gt_mask': to_np(target[:4,0,:,:]),
+                            'pred_mask': to_np(m(output.data[:4,0,:,:])),
+                            'pred_wt': y_preds_wt[:4,:,:],
+                        }
+                        for tag, images in info.items():
+                            logger.image_summary(tag, images, valid_minib_counter)
 
 
-        # measure accuracy and record loss
-        losses.update(loss.data[0], input.size(0))
-        bce_losses.update(bce_loss.data[0], input.size(0))
-        dice_losses.update(dice_loss.data[0], input.size(0))
-        hard_dices.update(hard_dice_.data[0], input.size(0))
-        ap_scores.update(averaged_aps_wt, input.size(0))
-        ar_scores.update(averaged_ars_wt, input.size(0))
+            # measure accuracy and record loss
+            losses.update(loss.data[0], input.size(0))
+            bce_losses.update(bce_loss.data[0], input.size(0))
+            dice_losses.update(dice_loss.data[0], input.size(0))
+            hard_dices.update(hard_dice_.data[0], input.size(0))
+            ap_scores.update(averaged_aps_wt, input.size(0))
+            ar_scores.update(averaged_ars_wt, input.size(0))
 
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-        #============ TensorBoard logging ============#
-        # Log the scalar values        
-        if args.tensorboard:
-            info = {
-                'val_loss': losses.val,
-                'val_bce_loss': bce_losses.val,
-                'val_dice_loss': dice_losses.val,
-                'val_hard_dice': hard_dices.val,
-                'val_ap_score': ap_scores.val,
-                'val_ar_score': ar_scores.val,
+            #============ TensorBoard logging ============#
+            # Log the scalar values        
+            if args.tensorboard:
+                info = {
+                    'val_loss': losses.val,
+                    'val_bce_loss': bce_losses.val,
+                    'val_dice_loss': dice_losses.val,
+                    'val_hard_dice': hard_dices.val,
+                    'val_ap_score': ap_scores.val,
+                    'val_ar_score': ar_scores.val,
 
-            }
-            for tag, value in info.items():
-                logger.scalar_summary(tag, value, valid_minib_counter)            
-        
-        valid_minib_counter += 1
-        
-        if i % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss  {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'HDICE {hard_dices.val:.4f} ({hard_dices.avg:.4f})\t'
-                  'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
-                  'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'.format(
-                   i, len(val_loader), batch_time=batch_time,
-                      loss=losses,hard_dices=hard_dices,
-                      ap_scores=ap_scores,ar_scores=ar_scores))
-            
-        # break out of cycle early if required
-        # must be used with Dataloader shuffle = True
-        if args.epoch_fraction < 1.0:
-            if i > len(val_loader) * args.epoch_fraction:
-                print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
-                break
+                }
+                for tag, value in info.items():
+                    logger.scalar_summary(tag, value, valid_minib_counter)            
+
+            valid_minib_counter += 1
+
+            if i % args.print_freq == 0:
+                print('Test: [{0}/{1}]\t'
+                      'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Loss  {loss.val:.4f} ({loss.avg:.4f})\t'
+                      'HDICE {hard_dices.val:.4f} ({hard_dices.avg:.4f})\t'
+                      'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
+                      'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'.format(
+                       i, len(val_loader), batch_time=batch_time,
+                          loss=losses,hard_dices=hard_dices,
+                          ap_scores=ap_scores,ar_scores=ar_scores))
+
+            # break out of cycle early if required
+            # must be used with Dataloader shuffle = True
+            if args.epoch_fraction < 1.0:
+                if i > len(val_loader) * args.epoch_fraction:
+                    print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
+                    break
                 
     print(' * Avg Val  Loss  {loss.avg:.4f}'.format(loss=losses))
     print(' * Avg Val  HDICE {hard_dices.avg:.4f}'.format(hard_dices=hard_dices))
@@ -733,141 +751,146 @@ def evaluate(val_loader,
     
     prere = pd.DataFrame(columns = ['img_id', 'img_saved_id', 'pre', 're', 'TPs', 'FPs', 'FNs', 'Pre_ave', 'Re_ave'])
     
-    for i, (input, target, weight, img_ids) in enumerate(val_loader):
-        
-        input = input.float().cuda(async=True)
-        target = target.float().cuda(async=True)
-        weight = weight.float().cuda(async=True)
-        
-        input_var = torch.autograd.Variable(input, volatile=True)
-        target_var = torch.autograd.Variable(target, volatile=True)
-        weight_var = torch.autograd.Variable(weight)
-        
-        visualize_condition = (i % int(save_freq) == 0)
-       
-        # compute output
-        output = model(input_var)
-        
-        averaged_aps_wt = []
-        averaged_ars_wt = []
-        averaged_aps_wt2 = []
-        averaged_ars_wt2 = []
-        y_preds_wt = []
-            
-        for j,pred_output in enumerate(output):
-            pred_mask = m(pred_output[0,:,:]).data.cpu().numpy()
-            
-            pred_mask_255 = np.copy(pred_mask) * 255 #?        
-            
-            pre, re, TPs, FPs, FNs = mix_vis_masks(gtmask = target[j,0,:,:].cpu().numpy()*255, 
-                  genmask = pred_mask_255, 
-                  orig = input[j,0,:,:].cpu().numpy()*255, 
-                  lbl_treshold = args.ths, 
-                  save_path = 'saved_imgs', 
-                  save_title = '{}_{}_{}.png'.format(img_ids[j], i, j), 
-                  do_vis = visualize_condition,
-                  do_save = visualize_condition)
-            
-            if visualize_condition:
-                img_saved_id = '{}_{}_{}.png'.format(img_ids[j], i, j)
-            else:
-                img_saved_id = np.nan
-            
-            averaged_aps_wt2.append(pre)
-            averaged_ars_wt2.append(re)
-            # print('pre: {}, re: {}'.format(pre, re))
+    with torch.no_grad():
+        for i, (input, target, weight, img_ids) in enumerate(val_loader):
 
-            # !!!
-            # for baseline - assume that in the ground-truths buildings are not touching
-            # otherwise - add additional output to the generator
-            gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
-            num_buildings = gt_labels.max()
-            gt_masks = []
+            #input = input.float().cuda(async=True)
+            #target = target.float().cuda(async=True)
+            #weight = weight.float().cuda(async=True)
+            input = input.float().to(device)
+            target = target.float().to(device)
+            weight = weight.float().to(device)
 
-            for _ in range(1,num_buildings+1):
-                gt_masks.append((gt_labels==_)*1) 
+            #input_var = torch.autograd.Variable(input, volatile=True)
+            #target_var = torch.autograd.Variable(target, volatile=True)
+            #weight_var = torch.autograd.Variable(weight)
+
+            visualize_condition = (i % int(save_freq) == 0)
+
+            # compute output
+            #output = model(input_var)
+            output = model(input)
             
-            aps = 0
-            ars = 0
-            
-            if num_buildings==0:
-                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
-                
-                if y_pred_wt.max()==0:
-                    aps = 1
-                    ars = 1
+            averaged_aps_wt = []
+            averaged_ars_wt = []
+            averaged_aps_wt2 = []
+            averaged_ars_wt2 = []
+            y_preds_wt = []
+
+            for j,pred_output in enumerate(output):
+                pred_mask = m(pred_output[0,:,:]).data.cpu().numpy()
+
+                pred_mask_255 = np.copy(pred_mask) * 255 #?        
+
+                pre, re, TPs, FPs, FNs = mix_vis_masks(gtmask = target[j,0,:,:].cpu().numpy()*255, 
+                      genmask = pred_mask_255, 
+                      orig = input[j,0,:,:].cpu().numpy()*255, 
+                      lbl_treshold = args.ths, 
+                      save_path = 'saved_imgs', 
+                      save_title = '{}_{}_{}.png'.format(img_ids[j], i, j), 
+                      do_vis = visualize_condition,
+                      do_save = visualize_condition)
+
+                if visualize_condition:
+                    img_saved_id = '{}_{}_{}.png'.format(img_ids[j], i, j)
                 else:
-                    aps = 0
-                    ars = 0                   
-            else:
-                # simple wt
-                y_pred_wt = wt_baseline(pred_mask_255, args.ths)
-            
-                __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
-                aps = __[1]
-                ars = __[3]
+                    img_saved_id = np.nan
 
-            # apply colormap for easier tracking
-            averaged_aps_wt.append(aps)
-            averaged_ars_wt.append(ars)
-            
-            prere_samp = pd.DataFrame(columns = ['img_id', 'img_saved_id', 'pre', 're', 'TPs', 'FPs', 'FNs', 'Pre_ave', 'Re_ave'])
-            prere_samp.loc[0] = [img_ids[j], img_saved_id, pre, re, TPs, FPs, FNs, aps, ars]
-            prere = pd.concat([prere, prere_samp], ignore_index = True)
-            if visualize_condition:
-                y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
-                y_preds_wt.append(y_pred_wt)
-                
-        # measure accuracy
-        
-        averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
-        averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
-        
-        averaged_aps_wt2 = np.asarray(averaged_aps_wt2).mean()
-        averaged_ars_wt2 = np.asarray(averaged_ars_wt2).mean()
-        
-        ap_scores.update(averaged_aps_wt, input.size(0))
-        ar_scores.update(averaged_ars_wt, input.size(0))
-        
-        ap_scores2.update(averaged_aps_wt2, input.size(0))
-        ar_scores2.update(averaged_ars_wt2, input.size(0))
+                averaged_aps_wt2.append(pre)
+                averaged_ars_wt2.append(re)
+                # print('pre: {}, re: {}'.format(pre, re))
 
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
+                # !!!
+                # for baseline - assume that in the ground-truths buildings are not touching
+                # otherwise - add additional output to the generator
+                gt_labels = wt_baseline(target[j,0,:,:].cpu().numpy()*255,args.ths)
+                num_buildings = gt_labels.max()
+                gt_masks = []
 
-        #============ TensorBoard logging ============#
-        # Log the scalar values        
-        if args.tensorboard:
-            info = {
-                'val_ap_score': ap_scores.val,
-                'val_ar_score': ar_scores.val,
-                'val_ap_score2': ap_scores2.val,
-                'val_ar_score2': ar_scores2.val,
+                for _ in range(1,num_buildings+1):
+                    gt_masks.append((gt_labels==_)*1) 
 
-            }
-            for tag, value in info.items():
-                logger.scalar_summary(tag, value, valid_minib_counter)            
-        
-        valid_minib_counter += 1
-        
-        if i % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
-                  'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'
-                  'AP2    {ap_scores2.val:.4f} ({ap_scores2.avg:.4f})\t'
-                  'AR2    {ar_scores2.val:.4f} ({ar_scores2.avg:.4f})\t'.format(
-                   i, len(val_loader), batch_time=batch_time,
-                      ap_scores=ap_scores,ar_scores=ar_scores,
-                      ap_scores2=ap_scores2,ar_scores2=ar_scores2))
-            
-        # break out of cycle early if required
-        # must be used with Dataloader shuffle = True
-        if args.epoch_fraction < 1.0:
-            if i > len(val_loader) * args.epoch_fraction:
-                print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
-                break
+                aps = 0
+                ars = 0
+
+                if num_buildings==0:
+                    y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+
+                    if y_pred_wt.max()==0:
+                        aps = 1
+                        ars = 1
+                    else:
+                        aps = 0
+                        ars = 0                   
+                else:
+                    # simple wt
+                    y_pred_wt = wt_baseline(pred_mask_255, args.ths)
+
+                    __ = calculate_ap(y_pred_wt, np.asarray(gt_masks))
+                    aps = __[1]
+                    ars = __[3]
+
+                # apply colormap for easier tracking
+                averaged_aps_wt.append(aps)
+                averaged_ars_wt.append(ars)
+
+                prere_samp = pd.DataFrame(columns = ['img_id', 'img_saved_id', 'pre', 're', 'TPs', 'FPs', 'FNs', 'Pre_ave', 'Re_ave'])
+                prere_samp.loc[0] = [img_ids[j], img_saved_id, pre, re, TPs, FPs, FNs, aps, ars]
+                prere = pd.concat([prere, prere_samp], ignore_index = True)
+                if visualize_condition:
+                    y_pred_wt = cv2.applyColorMap((y_pred_wt / y_pred_wt.max() * 255).astype('uint8'), cv2.COLORMAP_JET) 
+                    y_preds_wt.append(y_pred_wt)
+
+            # measure accuracy
+
+            averaged_aps_wt = np.asarray(averaged_aps_wt).mean()
+            averaged_ars_wt = np.asarray(averaged_ars_wt).mean()
+
+            averaged_aps_wt2 = np.asarray(averaged_aps_wt2).mean()
+            averaged_ars_wt2 = np.asarray(averaged_ars_wt2).mean()
+
+            ap_scores.update(averaged_aps_wt, input.size(0))
+            ar_scores.update(averaged_ars_wt, input.size(0))
+
+            ap_scores2.update(averaged_aps_wt2, input.size(0))
+            ar_scores2.update(averaged_ars_wt2, input.size(0))
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            #============ TensorBoard logging ============#
+            # Log the scalar values        
+            if args.tensorboard:
+                info = {
+                    'val_ap_score': ap_scores.val,
+                    'val_ar_score': ar_scores.val,
+                    'val_ap_score2': ap_scores2.val,
+                    'val_ar_score2': ar_scores2.val,
+
+                }
+                for tag, value in info.items():
+                    logger.scalar_summary(tag, value, valid_minib_counter)            
+
+            valid_minib_counter += 1
+
+            if i % args.print_freq == 0:
+                print('Test: [{0}/{1}]\t'
+                      'Time  {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'AP    {ap_scores.val:.4f} ({ap_scores.avg:.4f})\t'
+                      'AR    {ar_scores.val:.4f} ({ar_scores.avg:.4f})\t'
+                      'AP2    {ap_scores2.val:.4f} ({ap_scores2.avg:.4f})\t'
+                      'AR2    {ar_scores2.val:.4f} ({ar_scores2.avg:.4f})\t'.format(
+                       i, len(val_loader), batch_time=batch_time,
+                          ap_scores=ap_scores,ar_scores=ar_scores,
+                          ap_scores2=ap_scores2,ar_scores2=ar_scores2))
+
+            # break out of cycle early if required
+            # must be used with Dataloader shuffle = True
+            if args.epoch_fraction < 1.0:
+                if i > len(val_loader) * args.epoch_fraction:
+                    print('Proceed to next epoch on {}/{}'.format(i,len(val_loader)))
+                    break
 
     print(' * Avg Val  AP    {ap_scores.avg:.4f}'.format(ap_scores=ap_scores))
     print(' * Avg Val  AR    {ar_scores.avg:.4f}'.format(ar_scores=ar_scores))
