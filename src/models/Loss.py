@@ -19,12 +19,11 @@ class HardDice(nn.Module):
         
         intersection = (hard_output * dice_target).sum()
         if self.deduct_intersection:
-            union = hard_output.sum() + dice_target.sum()
-            hard_dice = (1+torch.log(2 * intersection / (union - intersection + eps)))               
+            union = hard_output.sum() + dice_target.sum() - intersection + eps
         else:
             union = hard_output.sum() + dice_target.sum() + eps
-            hard_dice = (1+torch.log(2 * intersection / union))
-
+        
+        hard_dice = (1+torch.log(2 * intersection / union))
         hard_dice = torch.clamp(hard_dice,0,1)
         return hard_dice
 
@@ -75,11 +74,11 @@ class SemsegLoss(nn.Module):
         
         intersection = (dice_output * dice_target).sum()
         if self.deduct_intersection:
-            union = dice_output.sum() + dice_target.sum()
-            dice_loss = (-torch.log(2 * intersection / (union - intersection + self.eps)))
+            union = dice_output.sum() + dice_target.sum() - intersection + self.eps
         else:
             union = dice_output.sum() + dice_target.sum() + self.eps
-            dice_loss = (-torch.log(2 * intersection / union))  
+        
+        dice_loss = (-torch.log(2 * intersection / union))  
         
         if self.use_running_mean == False:
             bmw = self.bce_weight
@@ -163,11 +162,11 @@ class SemsegLossWeighted(nn.Module):
         
         intersection = (dice_output * dice_target).sum()
         if self.deduct_intersection:
-            union = dice_output.sum() + dice_target.sum()
-            dice_loss = (-torch.log(2 * intersection / (union - intersection + self.eps)))
+            union = dice_output.sum() + dice_target.sum() - intersection + self.eps
         else:
             union = dice_output.sum() + dice_target.sum() + self.eps
-            dice_loss = (-torch.log(2 * intersection / union))         
+            
+        dice_loss = (-torch.log(2 * intersection / union))         
         
         if self.use_running_mean == False:
             bmw = self.bce_weight
