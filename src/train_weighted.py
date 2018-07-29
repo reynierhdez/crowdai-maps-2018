@@ -97,6 +97,9 @@ parser.add_argument('--do_remove_small_on_borders',     default=False,         t
 parser.add_argument('--do_produce_sizes_mask',          default=False,         type=str2bool, help='Whether to use running mean for loss')
 parser.add_argument('--do_produce_distances_mask',      default=False,         type=str2bool, help='Whether to use running mean for loss')
 
+parser.add_argument('--deduct_intersection',            default=False,         type=str2bool, help='Whether to deduct the center of the union')
+parser.add_argument('--do_one_distance',                default=False,         type=str2bool, help='Whether to use running mean for loss')
+
 # ============ logging params and utilities ============#
 parser.add_argument('--print-freq',          default=10,            type=int, help='print frequency (default: 10)')
 parser.add_argument('--lognumber',           default='test_model',  type=str, help='text id for saving logs')
@@ -126,7 +129,6 @@ assert args.m0 <= args.m1
 args.cuda = torch.cuda.is_available()
 torch.manual_seed(args.seed)
 device = torch.device("cuda" if args.cuda else "cpu")
-kwargs = {'num_workers': 0, 'pin_memory': True} if args.cuda else {}
 
 # Set the Tensorboard logger
 if args.tensorboard or args.tensorboard_images:
@@ -215,7 +217,8 @@ def main():
         criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                bce_weight = args.bce_weight,
                                dice_weight = args.dice_weight,
-                               use_weight_mask = True).cuda()
+                               use_weight_mask = True,
+                               deduct_intersection = args.deduct_intersection).to(device)
         
         hard_dice = HardDice(threshold=args.ths)        
 
@@ -284,7 +287,8 @@ def main():
         criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                bce_weight = args.bce_weight,
                                dice_weight = args.dice_weight,
-                               use_weight_mask = True).cuda()
+                               use_weight_mask = True,
+                               deduct_intersection = args.deduct_intersection).to(device)
         
         hard_dice = HardDice(threshold=args.ths)
 
@@ -333,7 +337,8 @@ def main():
                     criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                            bce_weight = args.bce_weight,
                                            dice_weight = args.dice_weight * 10.0,
-                                           use_weight_mask = True).cuda()
+                                           use_weight_mask = True,
+                                           deduct_intersection = args.deduct_intersection).to(device)
                                         
                     print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
                     
@@ -353,7 +358,8 @@ def main():
                 criterion = SemsegLoss(use_running_mean = args.do_running_mean,
                                        bce_weight = args.bce_weight,
                                        dice_weight = args.dice_weight * 10.0,
-                                       use_weight_mask = True).cuda()
+                                       use_weight_mask = True,
+                                       deduct_intersection = args.deduct_intersection).to(device)
                 
                 print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
                 
