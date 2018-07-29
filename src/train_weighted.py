@@ -334,6 +334,9 @@ def main():
                                            bce_weight = args.bce_weight,
                                            dice_weight = args.dice_weight * 10.0,
                                            use_weight_mask = True).cuda()
+                                        
+                    print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
+                    
             else:
                 # if started from checkpoint
                 # then unfreeze encoder 
@@ -455,23 +458,13 @@ def train(train_loader,
         # measure data loading time
         data_time.update(time.time() - end)
 
-        #input = input.float().cuda(async=True)
-        #target = target.float().cuda(async=True)
-        #weight = weight.float().cuda(async=True)
         input = input.float().to(device)
         target = target.float().to(device)                    
         weight = weight.float().to(device)
 
-        #input_var = torch.autograd.Variable(input)
-        #target_var = torch.autograd.Variable(target)
-        #weight_var = torch.autograd.Variable(weight)
-
         # compute output
-        #output = model(input_var)
         output = model(input)
                                             
-        #loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
-        #hard_dice_ = hard_dice(output, target_var)
         loss,bce_loss,dice_loss = criterion(output, target, weight)
         hard_dice_ = hard_dice(output, target)
         
@@ -485,10 +478,10 @@ def train(train_loader,
         end = time.time()        
 
         # measure accuracy and record loss
-        losses.update(loss.data[0], input.size(0))
-        bce_losses.update(bce_loss.data[0], input.size(0))
-        dice_losses.update(dice_loss.data[0], input.size(0))
-        hard_dices.update(hard_dice_.data[0], input.size(0))        
+        losses.update(loss.item(), input.size(0))
+        bce_losses.update(bce_loss.item(), input.size(0))
+        dice_losses.update(dice_loss.item(), input.size(0))
+        hard_dices.update(hard_dice_.item(), input.size(0))        
         
         # log the current lr
         current_lr = optimizer.state_dict()['param_groups'][0]['lr']
@@ -568,22 +561,12 @@ def validate(val_loader,
             input = input.float().to(device)
             target = target.float().to(device)
             weight = weight.float().to(device)
-            #input = input.float().cuda(async=True)
-            #target = target.float().cuda(async=True)
-            #weight = weight.float().cuda(async=True)
-
-            #input_var = torch.autograd.Variable(input, volatile=True)
-            #target_var = torch.autograd.Variable(target, volatile=True)
-            #weight_var = torch.autograd.Variable(weight)
 
             visualize_condition = (i % int(args.print_freq * 2 * args.epoch_fraction + 1) == 0)
 
             # compute output
-            #output = model(input_var)
             output = model(input)
 
-            #loss,bce_loss,dice_loss = criterion(output, target_var, weight_var)
-            #hard_dice_ = hard_dice(output, target_var)
             loss,bce_loss,dice_loss = criterion(output, target, weight)
             hard_dice_ = hard_dice(output, target)
 
@@ -661,10 +644,10 @@ def validate(val_loader,
 
 
             # measure accuracy and record loss
-            losses.update(loss.data[0], input.size(0))
-            bce_losses.update(bce_loss.data[0], input.size(0))
-            dice_losses.update(dice_loss.data[0], input.size(0))
-            hard_dices.update(hard_dice_.data[0], input.size(0))
+            losses.update(loss.item(), input.size(0))
+            bce_losses.update(bce_loss.item(), input.size(0))
+            dice_losses.update(dice_loss.item(), input.size(0))
+            hard_dices.update(hard_dice_.item(), input.size(0))
             ap_scores.update(averaged_aps_wt, input.size(0))
             ar_scores.update(averaged_ars_wt, input.size(0))
 
@@ -754,21 +737,13 @@ def evaluate(val_loader,
     with torch.no_grad():
         for i, (input, target, weight, img_ids) in enumerate(val_loader):
 
-            #input = input.float().cuda(async=True)
-            #target = target.float().cuda(async=True)
-            #weight = weight.float().cuda(async=True)
             input = input.float().to(device)
             target = target.float().to(device)
             weight = weight.float().to(device)
 
-            #input_var = torch.autograd.Variable(input, volatile=True)
-            #target_var = torch.autograd.Variable(target, volatile=True)
-            #weight_var = torch.autograd.Variable(weight)
-
             visualize_condition = (i % int(save_freq) == 0)
 
             # compute output
-            #output = model(input_var)
             output = model(input)
             
             averaged_aps_wt = []
