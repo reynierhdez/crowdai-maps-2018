@@ -4,9 +4,11 @@ import torch.nn.functional as F
 
 class HardDice(nn.Module):
     def __init__(self,
-                 threshold=0.5):
+                 threshold=0.5,
+                 deduct_intersection=False):
         super().__init__()
         self.threshold = threshold
+        self.deduct_intersection = deduct_intersection
         
     def forward(self, outputs, targets):
         eps = 1e-10
@@ -16,10 +18,14 @@ class HardDice(nn.Module):
         hard_output = (dice_output > self.threshold).float()
         
         intersection = (hard_output * dice_target).sum()
-        union = hard_output.sum() + dice_target.sum()
-        hard_dice = (1+torch.log(2 * intersection / (union - intersection +eps)))
+        if self.deduct_intersection:
+            union = hard_output.sum() + dice_target.sum()
+            hard_dice = (1+torch.log(2 * intersection / (union - intersection + eps)))               
+        else:
+            union = hard_output.sum() + dice_target.sum() + eps
+            hard_dice = (1+torch.log(2 * intersection / union))
+
         hard_dice = torch.clamp(hard_dice,0,1)
-        
         return hard_dice
 
 class SemsegLoss(nn.Module):
@@ -28,7 +34,8 @@ class SemsegLoss(nn.Module):
                  bce_weight=1,
                  dice_weight=1,
                  eps=1e-10,
-                 gamma=0.9
+                 gamma=0.9,
+                 deduct_intersection=False
                  ):
         super().__init__()
 
@@ -42,6 +49,7 @@ class SemsegLoss(nn.Module):
         self.use_running_mean = use_running_mean
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
+        self.deduct_intersection = deduct_intersection
         
         if self.use_running_mean == True:
             self.register_buffer('running_bce_loss', torch.zeros(1))
@@ -64,9 +72,14 @@ class SemsegLoss(nn.Module):
 
         dice_target = (targets == 1).float()
         dice_output = F.sigmoid(outputs)
+        
         intersection = (dice_output * dice_target).sum()
-        union = dice_output.sum() + dice_target.sum() + self.eps
-        dice_loss = (-torch.log(2 * intersection / union))        
+        if self.deduct_intersection:
+            union = dice_output.sum() + dice_target.sum()
+            dice_loss = (-torch.log(2 * intersection / (union - intersection + self.eps)))
+        else:
+            union = dice_output.sum() + dice_target.sum() + self.eps
+            dice_loss = (-torch.log(2 * intersection / union))  
         
         if self.use_running_mean == False:
             bmw = self.bce_weight
@@ -93,7 +106,8 @@ class SemsegLossWeighted(nn.Module):
                  dice_weight=1,
                  eps=1e-10,
                  gamma=0.9,
-                 use_weight_mask=False,                 
+                 use_weight_mask=False,
+                 deduct_intersection=False
                  ):
         super().__init__()
 
@@ -108,6 +122,7 @@ class SemsegLossWeighted(nn.Module):
         self.use_running_mean = use_running_mean
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
+        self.deduct_intersection = deduct_intersection
         
         if self.use_running_mean == True:
             self.register_buffer('running_bce_loss', torch.zeros(1))
@@ -145,9 +160,14 @@ class SemsegLossWeighted(nn.Module):
 
         dice_target = (targets == 1).float()
         dice_output = F.sigmoid(outputs)
+        
         intersection = (dice_output * dice_target).sum()
-        union = dice_output.sum() + dice_target.sum() + self.eps
-        dice_loss = (-torch.log(2 * intersection / union))        
+        if self.deduct_intersection:
+            union = dice_output.sum() + dice_target.sum()
+            dice_loss = (-torch.log(2 * intersection / (union - intersection + self.eps)))
+        else:
+            union = dice_output.sum() + dice_target.sum() + self.eps
+            dice_loss = (-torch.log(2 * intersection / union))         
         
         if self.use_running_mean == False:
             bmw = self.bce_weight

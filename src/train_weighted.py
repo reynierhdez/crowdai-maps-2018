@@ -326,6 +326,9 @@ def main():
                                            bce_weight = args.bce_weight,
                                            dice_weight = args.dice_weight * 10.0,
                                            use_weight_mask = True).cuda()
+                    
+                    print('Current loss weights: DICE {}, BCE {}'.format(args.bce_weight,args.dice_weight * 10.0))
+                    
             else:
                 # if started from checkpoint
                 # then unfreeze encoder 
