@@ -345,9 +345,9 @@ class MapDataset(data.Dataset):
             if self.do_produce_sizes_mask or self.do_produce_distances_mask:
                 weights = msk[-1,:,:]
                 msk = msk[:-1,:,:]
-                return img,msk,weights,img_id
+                return img.astype('float32'),msk.astype('float32'),weights.astype('float32'),img_id
             else:
-                return img,msk,img_id
+                return img.astype('float32'),msk.astype('float32'),img_id
 
         elif self.mode == 'test':
             img = imread(self.test_paths[idx])

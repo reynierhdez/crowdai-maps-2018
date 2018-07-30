@@ -203,7 +203,8 @@ def main():
                                  sigma = args.sigma,
                                  do_remove_small_on_borders = args.do_remove_small_on_borders,
                                  do_produce_sizes_mask = args.do_produce_sizes_mask,
-                                 do_produce_distances_mask = args.do_produce_distances_mask
+                                 do_produce_distances_mask = args.do_produce_distances_mask,
+                                 do_one_distance = args.do_one_distance,
                                 )
         
         val_loader = torch.utils.data.DataLoader(
@@ -220,7 +221,8 @@ def main():
                                use_weight_mask = True,
                                deduct_intersection = args.deduct_intersection).to(device)
         
-        hard_dice = HardDice(threshold=args.ths)        
+        hard_dice = HardDice(threshold=args.ths,
+                             deduct_intersection = args.deduct_intersection)        
 
         val_ap,val_ar = evaluate(val_loader,
                                  model,
@@ -252,7 +254,8 @@ def main():
                                    size_divisor = args.size_divisor,
                                    do_remove_small_on_borders = args.do_remove_small_on_borders,
                                    do_produce_sizes_mask = args.do_produce_sizes_mask,
-                                   do_produce_distances_mask = args. do_produce_distances_mask                                  
+                                   do_produce_distances_mask = args.do_produce_distances_mask,
+                                   do_one_distance = args.do_one_distance,
                                   )
 
         val_dataset = MapDataset(transforms = val_augs,
@@ -265,7 +268,8 @@ def main():
                                  size_divisor = args.size_divisor,
                                  do_remove_small_on_borders = args.do_remove_small_on_borders,
                                  do_produce_sizes_mask = args.do_produce_sizes_mask,
-                                 do_produce_distances_mask = args. do_produce_distances_mask
+                                 do_produce_distances_mask = args. do_produce_distances_mask,
+                                 do_one_distance = args.do_one_distance,
                                 )
         
         train_loader = torch.utils.data.DataLoader(
@@ -290,7 +294,8 @@ def main():
                                use_weight_mask = True,
                                deduct_intersection = args.deduct_intersection).to(device)
         
-        hard_dice = HardDice(threshold=args.ths)
+        hard_dice = HardDice(threshold=args.ths,
+                             deduct_intersection = args.deduct_intersection)
 
         if args.m1<args.m2:
             milestones = [args.m1,args.m2]
